@@ -8,7 +8,7 @@ Demonstrates basic functionality and project setup for using Ponca and Polyscope
 
 ```
 git clone --recurse-submodules https://github.com/ani37/GSoC.git
-cd libigl-polyscope-project-template
+cd GSoC
 mkdir build
 cd build
 cmake ..

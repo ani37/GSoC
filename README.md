@@ -1,13 +1,13 @@
-# libIGL & Polyscope & Ponca
+# libIGL, Polyscope & Ponca
 
-Demonstrates basic functionality and project setup for using Polyscope with libIGL.
+Demonstrates basic functionality and project setup for using Ponca and Polyscope with libIGL.
 
 
 
 ## To download and build
 
 ```
-git clone --recurse-submodules https://github.com/nmwsharp/libigl-polyscope-project-template.git
+git clone --recurse-submodules https://github.com/ani37/GSoC.git
 cd libigl-polyscope-project-template
 mkdir build
 cd build

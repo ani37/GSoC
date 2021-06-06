@@ -1,0 +1,1 @@
+/bin/x86_64-linux-gnu-g++-9  -g   CMakeFiles/gls_compare.dir/gls_compare.cpp.o  -o ../../../../bin/gls_compare  /usr/lib/gcc/x86_64-linux-gnu/9/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.so 

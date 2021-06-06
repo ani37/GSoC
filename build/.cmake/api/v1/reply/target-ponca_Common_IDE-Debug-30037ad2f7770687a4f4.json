@@ -1,0 +1,94 @@
+{
+	"backtrace" : 3,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"include"
+		],
+		"files" : 
+		[
+			"deps/ponca/cmake/PoncaConfigureCommon.cmake",
+			"deps/ponca/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 137,
+				"parent" : 0
+			},
+			{
+				"file" : 0,
+				"parent" : 1
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 44,
+				"parent" : 2
+			}
+		]
+	},
+	"id" : "ponca_Common_IDE::@fcb908beb17b7ce151bd",
+	"name" : "ponca_Common_IDE",
+	"paths" : 
+	{
+		"build" : "deps/ponca",
+		"source" : "deps/ponca"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0,
+				1
+			]
+		},
+		{
+			"name" : "Header Files",
+			"sourceIndexes" : 
+			[
+				2,
+				3,
+				4
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 3,
+			"path" : "deps/ponca/Ponca/Common",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"path" : "deps/ponca/Ponca/Ponca",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 3,
+			"path" : "deps/ponca/Ponca/src/Common/defines.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 3,
+			"path" : "deps/ponca/Ponca/src/Common/Containers/limitedPriorityQueue.h",
+			"sourceGroupIndex" : 1
+		},
+		{
+			"backtrace" : 3,
+			"path" : "deps/ponca/Ponca/src/Common/Containers/stack.h",
+			"sourceGroupIndex" : 1
+		}
+	],
+	"type" : "UTILITY"
+}

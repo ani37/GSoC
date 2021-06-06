@@ -1,0 +1,127 @@
+{
+	"backtrace" : 2,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_multi_test",
+			"add_dependencies"
+		],
+		"files" : 
+		[
+			"deps/ponca/tests/CMakeLists.txt",
+			"deps/ponca/tests/src/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 9,
+				"parent" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 98,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 112,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 112,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 112,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 112,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 112,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 112,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 112,
+				"parent" : 1
+			},
+			{
+				"command" : 2,
+				"file" : 0,
+				"line" : 112,
+				"parent" : 1
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 3,
+			"id" : "fit_radius_curvature_center_7::@d9ccfad5817347db0a0c"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "fit_radius_curvature_center_4::@d9ccfad5817347db0a0c"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "fit_radius_curvature_center_3::@d9ccfad5817347db0a0c"
+		},
+		{
+			"backtrace" : 6,
+			"id" : "fit_radius_curvature_center_2::@d9ccfad5817347db0a0c"
+		},
+		{
+			"backtrace" : 7,
+			"id" : "fit_radius_curvature_center_1::@d9ccfad5817347db0a0c"
+		},
+		{
+			"backtrace" : 8,
+			"id" : "fit_radius_curvature_center_5::@d9ccfad5817347db0a0c"
+		},
+		{
+			"backtrace" : 9,
+			"id" : "fit_radius_curvature_center_6::@d9ccfad5817347db0a0c"
+		},
+		{
+			"backtrace" : 10,
+			"id" : "fit_radius_curvature_center_8::@d9ccfad5817347db0a0c"
+		}
+	],
+	"id" : "fit_radius_curvature_center::@d9ccfad5817347db0a0c",
+	"name" : "fit_radius_curvature_center",
+	"paths" : 
+	{
+		"build" : "deps/ponca/tests/src",
+		"source" : "deps/ponca/tests/src"
+	},
+	"sources" : [],
+	"type" : "UTILITY"
+}

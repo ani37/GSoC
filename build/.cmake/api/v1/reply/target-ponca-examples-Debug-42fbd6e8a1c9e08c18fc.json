@@ -1,0 +1,73 @@
+{
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target",
+			"add_dependencies"
+		],
+		"files" : 
+		[
+			"deps/ponca/examples/CMakeLists.txt",
+			"deps/ponca/examples/cpp/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 1,
+				"parent" : 0
+			},
+			{
+				"file" : 1
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 26,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 18,
+				"parent" : 2
+			},
+			{
+				"command" : 1,
+				"file" : 1,
+				"line" : 10,
+				"parent" : 2
+			}
+		]
+	},
+	"dependencies" : 
+	[
+		{
+			"backtrace" : 3,
+			"id" : "ponca_binding::@89a38ca8f68aa3dbc60f"
+		},
+		{
+			"backtrace" : 4,
+			"id" : "ponca_fit_plane::@89a38ca8f68aa3dbc60f"
+		},
+		{
+			"backtrace" : 5,
+			"id" : "ponca_basic_cpu::@89a38ca8f68aa3dbc60f"
+		}
+	],
+	"id" : "ponca-examples::@6bf5521512f2f219943c",
+	"name" : "ponca-examples",
+	"paths" : 
+	{
+		"build" : "deps/ponca/examples",
+		"source" : "deps/ponca/examples"
+	},
+	"sources" : [],
+	"type" : "UTILITY"
+}

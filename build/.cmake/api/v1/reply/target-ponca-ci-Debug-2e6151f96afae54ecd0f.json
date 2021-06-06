@@ -1,0 +1,64 @@
+{
+	"backtrace" : 1,
+	"backtraceGraph" : 
+	{
+		"commands" : 
+		[
+			"add_custom_target"
+		],
+		"files" : 
+		[
+			"deps/ponca/CMakeLists.txt"
+		],
+		"nodes" : 
+		[
+			{
+				"file" : 0
+			},
+			{
+				"command" : 0,
+				"file" : 0,
+				"line" : 172,
+				"parent" : 0
+			}
+		]
+	},
+	"id" : "ponca-ci::@fcb908beb17b7ce151bd",
+	"name" : "ponca-ci",
+	"paths" : 
+	{
+		"build" : "deps/ponca",
+		"source" : "deps/ponca"
+	},
+	"sourceGroups" : 
+	[
+		{
+			"name" : "",
+			"sourceIndexes" : 
+			[
+				0,
+				1,
+				2
+			]
+		}
+	],
+	"sources" : 
+	[
+		{
+			"backtrace" : 1,
+			"path" : "deps/ponca/.travis.yml",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "deps/ponca/.github/workflows/ContinuousTest.yml",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"path" : "deps/ponca/.github/workflows/stale.yml",
+			"sourceGroupIndex" : 0
+		}
+	],
+	"type" : "UTILITY"
+}

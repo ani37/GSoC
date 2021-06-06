@@ -1,180 +1,164 @@
-//Ponca
-
-
-
-
-//Polyscope
-#include "polyscope/polyscope.h"
-
-#include <igl/PI.h>
-#include <igl/avg_edge_length.h>
-#include <igl/barycenter.h>
-#include <igl/boundary_loop.h>
-#include <igl/exact_geodesic.h>
-#include <igl/gaussian_curvature.h>
-#include <igl/invert_diag.h>
-#include <igl/lscm.h>
-#include <igl/massmatrix.h>
-#include <igl/per_vertex_normals.h>
-#include <igl/readOBJ.h>
-
-#include "polyscope/messages.h"
-#include "polyscope/point_cloud.h"
-#include "polyscope/surface_mesh.h"
-
+#include <cmath>
+#include <algorithm>
 #include <iostream>
-#include <unordered_set>
-#include <utility>
+#include <vector>
+ 
+#include <Ponca/src/Fitting/basket.h>
+#include <Ponca/src/Fitting/gls.h>
+#include <Ponca/src/Fitting/orientedSphereFit.h>
+#include <Ponca/src/Fitting/weightFunc.h>
+#include <Ponca/src/Fitting/weightKernel.h>
+ 
+#include "Eigen/Eigen"
+ 
+ 
 
-#include "args/args.hxx"
-#include "json/json.hpp"
+#include "polyscope/point_cloud.h"
 
-// The mesh, Eigen representation
-Eigen::MatrixXd meshV;
-Eigen::MatrixXi meshF;
-
-// Options for algorithms
-int iVertexSource = 7;
-
-void addCurvatureScalar() {
-  using namespace Eigen;
-  using namespace std;
-
-  VectorXd K;
-  igl::gaussian_curvature(meshV, meshF, K);
-  SparseMatrix<double> M, Minv;
-  igl::massmatrix(meshV, meshF, igl::MASSMATRIX_TYPE_DEFAULT, M);
-  igl::invert_diag(M, Minv);
-  K = (Minv * K).eval();
-
-  polyscope::getSurfaceMesh("input mesh")
-      ->addVertexScalarQuantity("gaussian curvature", K,
-                                polyscope::DataType::SYMMETRIC);
+using namespace std;
+using namespace Ponca;
+ 
+#define DIMENSION 3
+ 
+/*
+   \brief Variant of the MyPoint class allowing to work with external raw data.
+ 
+   Using this approach, ones can use the patate library with already existing
+   data-structures and without any data-duplication.
+ 
+   In this example, we use this class to map an interlaced raw array containing
+   both point normals and coordinates.
+ */
+class MyPoint
+{
+public:
+    enum {Dim = DIMENSION};
+    typedef double Scalar;
+    typedef Eigen::Matrix<Scalar, Dim, 1>   VectorType;
+    typedef Eigen::Matrix<Scalar, Dim, Dim> MatrixType;
+ 
+    PONCA_MULTIARCH inline MyPoint(Scalar* _interlacedArray, int _pId)
+        : m_pos   (Eigen::Map< const VectorType >(_interlacedArray + Dim*2*_pId  )),
+        m_normal(Eigen::Map< const VectorType >(_interlacedArray + Dim*2*_pId+Dim))
+    {}
+ 
+    PONCA_MULTIARCH inline const Eigen::Map< const VectorType >& pos()    const { return m_pos; }
+    PONCA_MULTIARCH inline const Eigen::Map< const VectorType >& normal() const { return m_normal; }
+ 
+private:
+    Eigen::Map< const VectorType > m_pos, m_normal;
+};
+ 
+typedef MyPoint::Scalar Scalar;
+typedef MyPoint::VectorType VectorType;
+ 
+// Define related structure
+typedef DistWeightFunc<MyPoint,SmoothWeightKernel<Scalar> > WeightFunc;
+typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> Fit;
+ 
+ 
+template<typename Fit>
+void test_fit(Fit& _fit,
+              Scalar* _interlacedArray,
+              int _n,
+              const VectorType& _p)
+{
+    Scalar tmax = 100.0;
+ 
+    // Set a weighting function instance
+    _fit.setWeightFunc(WeightFunc(tmax));
+ 
+    // Set the evaluation position
+    _fit.init(_p);
+ 
+    // Iterate over samples and _fit the primitive
+    // A MyPoint instance is generated on the fly to bind the raw arrays to the
+    // library representation. No copy is done at this step.
+    for(int i = 0; i!= _n; i++)
+    {
+        _fit.addNeighbor(MyPoint(_interlacedArray, i));
+    }
+ 
+    //finalize fitting
+    _fit.finalize();
+ 
+    //Test if the fitting ended without errors
+    if(_fit.isStable())
+    {
+        cout << "Center: [" << _fit.center().transpose() << "] ;  radius: " << _fit.radius() << endl;
+ 
+        cout << "Pratt normalization"
+            << (_fit.applyPrattNorm() ? " is now done." : " has already been applied.") << endl;
+ 
+        // Play with fitting output
+        cout << "Value of the scalar field at the initial point: "
+            << _p.transpose()
+            << " is equal to " << _fit.potential(_p)
+            << endl;
+ 
+        cout << "It's gradient at this place is equal to: "
+            << _fit.primitiveGradient(_p).transpose()
+            << endl;
+ 
+        cout << "Fitted Sphere: " << endl
+            << "\t Tau  : "      << _fit.tau()             << endl
+            << "\t Eta  : "      << _fit.eta().transpose() << endl
+            << "\t Kappa: "      << _fit.kappa()           << endl;
+ 
+        cout << "The initial point " << _p.transpose()              << endl
+            << "Is projected at   " << _fit.project(_p).transpose() << endl;
+    }
 }
-
-void computeDistanceFrom() {
-  Eigen::VectorXi VS, FS, VT, FT;
-  // The selected vertex is the source
-  VS.resize(1);
-  VS << iVertexSource;
-  // All vertices are the targets
-  VT.setLinSpaced(meshV.rows(), 0, meshV.rows() - 1);
-  Eigen::VectorXd d;
-  igl::exact_geodesic(meshV, meshF, VS, FS, VT, FT, d);
-
-  polyscope::getSurfaceMesh("input mesh")
-      ->addVertexDistanceQuantity(
-          "distance from vertex " + std::to_string(iVertexSource), d);
+ 
+// Build an interlaced array containing _n position and normal vectors
+Scalar* buildInterlacedArray(int _n, vector<std::array<Scalar,DIMENSION > > pos, vector<std::array<Scalar,DIMENSION > > norms )
+{
+    Scalar* interlacedArray = new Scalar[uint8_t(2*DIMENSION*_n)];
+ 
+    for(int k=0; k<_n; ++k)
+    {
+        // For the simplicity of this example, we use Eigen Vectors to compute
+        // both coordinates and normals, and then copy the raw values to an
+        // interlaced array, discarding the Eigen representation.
+        Eigen::Matrix<Scalar, DIMENSION, 1> nvec = Eigen::Matrix<Scalar, DIMENSION, 1>::Random().normalized();
+        Eigen::Matrix<Scalar, DIMENSION, 1> pvec = nvec * Eigen::internal::random<Scalar>(0.9,1.1);
+       
+ 
+        // Grab coordinates and store them as raw buffer
+        memcpy(interlacedArray+2*DIMENSION*k,           pvec.data(), DIMENSION*sizeof(Scalar));
+        memcpy(interlacedArray+2*DIMENSION*k+DIMENSION, nvec.data(), DIMENSION*sizeof(Scalar));
+ 
+    }
+ 
+    return interlacedArray;
 }
+ 
+int main()
+{
+    // Build arrays containing normals and positions, simulating data coming from
+    // outside the library.
+    // initialise
+    polyscope::init();
+    
+    int n = 10;
+    vector<std::array<Scalar,DIMENSION > > pos, norms;
 
-void computeParameterization() {
-  using namespace Eigen;
-  using namespace std;
+    Scalar *interlacedArray = buildInterlacedArray(n, pos, norms);
+ 
+    // set evaluation point and scale at the first coordinate
+    VectorType p (interlacedArray);
 
-  // Fix two points on the boundary
-  VectorXi bnd, b(2, 1);
-  igl::boundary_loop(meshF, bnd);
 
-  if (bnd.size() == 0) {
-    polyscope::warning("mesh has no boundary, cannot parameterize");
-    return;
-  }
+    
+    // Here we now perform the fit, starting from a raw interlaced buffer, without
+    // any data duplication
+    Fit fit;
+    test_fit(fit, interlacedArray, n, p);
 
-  b(0) = bnd(0);
-  b(1) = bnd(round(bnd.size() / 2));
-  MatrixXd bc(2, 2);
-  bc << 0, 0, 1, 0;
+    
 
-  // LSCM parametrization
-  Eigen::MatrixXd V_uv;
-  igl::lscm(meshV, meshF, b, bc, V_uv);
-
-  polyscope::getSurfaceMesh("input mesh")
-      ->addVertexParameterizationQuantity("LSCM parameterization", V_uv);
-}
-
-void computeNormals() {
-  Eigen::MatrixXd N_vertices;
-  igl::per_vertex_normals(meshV, meshF, N_vertices);
-
-  polyscope::getSurfaceMesh("input mesh")
-      ->addVertexVectorQuantity("libIGL vertex normals", N_vertices);
-}
-
-void callback() {
-
-  static int numPoints = 2000;
-  static float param = 3.14;
-
-  ImGui::PushItemWidth(100);
-
-  // Curvature
-  if (ImGui::Button("add curvature")) {
-    addCurvatureScalar();
-  }
-  
-  // Normals 
-  if (ImGui::Button("add normals")) {
-    computeNormals();
-  }
-
-  // Param
-  if (ImGui::Button("add parameterization")) {
-    computeParameterization();
-  }
-
-  // Geodesics
-  if (ImGui::Button("compute distance")) {
-    computeDistanceFrom();
-  }
-  ImGui::SameLine();
-  ImGui::InputInt("source vertex", &iVertexSource);
-
-  ImGui::PopItemWidth();
-}
-
-int main(int argc, char **argv) {
-  // Configure the argument parser
-  args::ArgumentParser parser("A simple demo of Polyscope with libIGL.\nBy "
-                              "Nick Sharp (nsharp@cs.cmu.edu)",
-                              "");
-  args::Positional<std::string> inFile(parser, "mesh", "input mesh");
-
-  // Parse args
-  try {
-    parser.ParseCLI(argc, argv);
-  } catch (args::Help) {
-    std::cout << parser;
-    return 0;
-  } catch (args::ParseError e) {
-    std::cerr << e.what() << std::endl;
-
-    std::cerr << parser;
-    return 1;
-  }
-
-  // Options
-  polyscope::options::autocenterStructures = true;
-  polyscope::view::windowWidth = 1024;
-  polyscope::view::windowHeight = 1024;
-
-  // Initialize polyscope
-  polyscope::init();
-
-  std::string filename = args::get(inFile);
-  std::cout << "loading: " << filename << std::endl;
-
-  // Read the mesh
-  igl::readOBJ(filename, meshV, meshF);
-
-  // Register the mesh with Polyscope
-  polyscope::registerSurfaceMesh("input mesh", meshV, meshF);
-
-  // Add the callback
-  polyscope::state::userCallback = callback;
-
-  // Show the gui
-  polyscope::show();
-
-  return 0;
+    // visualize!
+    polyscope::registerPointCloud("positions", pos);
+    polyscope::registerPointCloud("normals", norms);
+    polyscope::show();
 }

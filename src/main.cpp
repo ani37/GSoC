@@ -210,7 +210,7 @@ int main(int argc, char **argv) {
     
     
     // visualize!
-    polyscope::registerPointCloud("positions", pos);
-    polyscope::registerPointCloud("normals", norms);
-    polyscope::show();
+    // polyscope::registerPointCloud("positions", pos);
+    // polyscope::registerPointCloud("normals", norms);
+    // polyscope::show();
 }

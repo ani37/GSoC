@@ -2,22 +2,33 @@
 #include <algorithm>
 #include <iostream>
 #include <vector>
- 
+
+//Ponca
 #include <Ponca/src/Fitting/basket.h>
 #include <Ponca/src/Fitting/gls.h>
 #include <Ponca/src/Fitting/orientedSphereFit.h>
 #include <Ponca/src/Fitting/weightFunc.h>
 #include <Ponca/src/Fitting/weightKernel.h>
- 
 #include "Eigen/Eigen"
- 
- 
 
+// Polyscope
 #include "polyscope/point_cloud.h"
+#include "polyscope/polyscope.h"
+#include "polyscope/surface_mesh.h"
+#include "geometrycentral/surface/manifold_surface_mesh.h"
+#include "geometrycentral/surface/meshio.h"
+#include "geometrycentral/surface/surface_mesh.h"
+#include "geometrycentral/surface/vertex_position_geometry.h"
+
 
 using namespace std;
 using namespace Ponca;
- 
+using namespace geometrycentral;
+using namespace geometrycentral::surface;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 #define DIMENSION 3
  
 /*
@@ -58,12 +69,15 @@ typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> Fit;
  
  
 template<typename Fit>
-void test_fit(Fit& _fit,
+VectorType test_fit(Fit& _fit,
               Scalar* _interlacedArray,
               int _n,
               const VectorType& _p)
 {
     Scalar tmax = 100.0;
+    
+    //
+    VectorType norm;
  
     // Set a weighting function instance
     _fit.setWeightFunc(WeightFunc(tmax));
@@ -99,6 +113,8 @@ void test_fit(Fit& _fit,
         cout << "It's gradient at this place is equal to: "
             << _fit.primitiveGradient(_p).transpose()
             << endl;
+        // set normals to return
+        norm = _fit.primitiveGradient(_p).transpose();
  
         cout << "Fitted Sphere: " << endl
             << "\t Tau  : "      << _fit.tau()             << endl
@@ -108,55 +124,91 @@ void test_fit(Fit& _fit,
         cout << "The initial point " << _p.transpose()              << endl
             << "Is projected at   " << _fit.project(_p).transpose() << endl;
     }
+    return norm;
 }
+
+
  
 // Build an interlaced array containing _n position and normal vectors
-Scalar* buildInterlacedArray(int _n, vector<std::array<Scalar,DIMENSION > > pos, vector<std::array<Scalar,DIMENSION > > norms )
+Scalar* buildInterlacedArray(vector<Vector3 > pos, vector<Vector3 > norms )
 {
+    int _n = pos.size();
     Scalar* interlacedArray = new Scalar[uint8_t(2*DIMENSION*_n)];
  
     for(int k=0; k<_n; ++k)
     {
-        // For the simplicity of this example, we use Eigen Vectors to compute
-        // both coordinates and normals, and then copy the raw values to an
-        // interlaced array, discarding the Eigen representation.
-        Eigen::Matrix<Scalar, DIMENSION, 1> nvec = Eigen::Matrix<Scalar, DIMENSION, 1>::Random().normalized();
-        Eigen::Matrix<Scalar, DIMENSION, 1> pvec = nvec * Eigen::internal::random<Scalar>(0.9,1.1);
-       
- 
-        // Grab coordinates and store them as raw buffer
-        memcpy(interlacedArray+2*DIMENSION*k,           pvec.data(), DIMENSION*sizeof(Scalar));
-        memcpy(interlacedArray+2*DIMENSION*k+DIMENSION, nvec.data(), DIMENSION*sizeof(Scalar));
- 
+        
+        // Grab position coordinates and store them as raw buffer
+        interlacedArray[2*DIMENSION*k] = pos[k][0];
+        interlacedArray[2*DIMENSION*k+1] = pos[k][1];
+        interlacedArray[2*DIMENSION*k+2] = pos[k][2];
+
+        // Grab normal coordinates and store them as raw buffer
+        interlacedArray[2*DIMENSION*k + DIMENSION ] = norms[k][0];
+        interlacedArray[2*DIMENSION*k + DIMENSION + 1] =norms[k][1];
+        interlacedArray[2*DIMENSION*k + DIMENSION + 2] = norms[k][2];
+        
     }
  
     return interlacedArray;
 }
  
-int main()
-{
-    // Build arrays containing normals and positions, simulating data coming from
-    // outside the library.
-    // initialise
+
+int main(int argc, char **argv) {
+
+   
+
     polyscope::init();
+
+    std::unique_ptr<SurfaceMesh> mesh;
+    std::unique_ptr<VertexPositionGeometry> geometry;
+    std::tie(mesh, geometry) = readSurfaceMesh("hippo.ply");
+    geometry->requireVertexPositions();
+
+
+    std::vector<Vector3> pos, norms;
+
+
+    // Build the node positions
+    for (Face f : mesh->faces()) {
+
+    // Compute center for face
+    Vector3 c = Vector3::zero();
+    for (Vertex v : f.adjacentVertices()) {
+        c += geometry->inputVertexPositions[v];
+    }
+    c /= f.degree();
+
+    pos.push_back(c);
+    }
+
+    // Set vertex tangent spaces
+    geometry->requireVertexTangentBasis();
+    for(Vertex v : mesh->vertices()) {
+        norms.push_back(geometry->vertexTangentBasis[v][0]);
+    }
+
+    Scalar *interlacedArray = buildInterlacedArray(pos, norms);
+
+    int n = pos.size();
+    // Find normals for each positions in test fit.
+
+    vector<VectorType> normals;
+    int dim = 0;
+    for(int i = 0; i < n; i++){
+
+        // set evaluation point and scale at the first coordinate
+        VectorType p (interlacedArray + dim);
+        
+        // Here we now perform the fit, starting from a raw interlaced buffer, without
+        // any data duplication
+        Fit fit;
+        VectorType  n = test_fit(fit, interlacedArray, pos.size(), p);
+        normals.push_back(n);
+        dim += 2*DIMENSION;
+    }
     
-    int n = 10;
-    vector<std::array<Scalar,DIMENSION > > pos, norms;
-
-    Scalar *interlacedArray = buildInterlacedArray(n, pos, norms);
- 
-    // set evaluation point and scale at the first coordinate
-    VectorType p (interlacedArray);
-
-
     
-    // Here we now perform the fit, starting from a raw interlaced buffer, without
-    // any data duplication
-    Fit fit;
-    test_fit(fit, interlacedArray, n, p);
-
-    
-
     // visualize!
     polyscope::registerPointCloud("positions", pos);
     polyscope::registerPointCloud("normals", norms);

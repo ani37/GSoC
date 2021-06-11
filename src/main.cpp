@@ -50,9 +50,9 @@ public:
     typedef Eigen::Matrix<Scalar, Dim, 1>   VectorType;
     typedef Eigen::Matrix<Scalar, Dim, Dim> MatrixType;
  
-    PONCA_MULTIARCH inline MyPoint(Scalar* _interlacedArray, int _pId)
-        : m_pos   (Eigen::Map< const VectorType >(_interlacedArray + Dim*2*_pId  )),
-        m_normal(Eigen::Map< const VectorType >(_interlacedArray + Dim*2*_pId+Dim))
+    PONCA_MULTIARCH inline MyPoint(std::array<Scalar, 3> poss, std::array<Scalar, 3>  tem_norm)
+        : m_pos   (Eigen::Map< const VectorType >(poss.begin())),
+        m_normal(Eigen::Map< const VectorType >(tem_norm.begin()))
     {}
  
     PONCA_MULTIARCH inline const Eigen::Map< const VectorType >& pos()    const { return m_pos; }
@@ -73,7 +73,8 @@ typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> Fit;
  
 template<typename Fit>
 VectorType test_fit(Fit& _fit,
-              Scalar* _interlacedArray,
+              std::vector<std::array<Scalar, 3> > poss,
+              std::vector<std::array<Scalar, 3> > tem_norm,
               int _n,
               const VectorType& _p)
 {
@@ -84,6 +85,7 @@ VectorType test_fit(Fit& _fit,
  
     // Set the evaluation position
     _fit.init(_p);
+
     VectorType vec;
  
     // Iterate over samples and _fit the primitive
@@ -91,7 +93,7 @@ VectorType test_fit(Fit& _fit,
     // library representation. No copy is done at this step.
     for(int i = 0; i!= _n; i++)
     {
-        _fit.addNeighbor(MyPoint(_interlacedArray, i));
+        _fit.addNeighbor(MyPoint(poss[i], tem_norm[i]));
     }
  
     //finalize fitting
@@ -124,36 +126,10 @@ VectorType test_fit(Fit& _fit,
         // cout << "The initial point " << _p.transpose()              << endl
         //     << "Is projected at   " << _fit.project(_p).transpose() << endl;
     }
+
     return vec;
 }
 
-
- 
-// Build an interlaced array containing _n position and normal vectors
-Scalar* buildInterlacedArray(std::vector<std::array<Scalar, 3> >  pos )
-{
-    int _n = pos.size();
-    Scalar* interlacedArray = new Scalar[(2*DIMENSION*_n + DIMENSION)];
-
- 
-    for(int k=0; k<_n; ++k)
-    {
-
-        //cout << pos[k][0] << " " << pos[k][1] <<' ' << pos[k][2] << '\n';
-        // Grab position coordinates and store them as raw buffer
-        interlacedArray[(2*DIMENSION*k)] = pos[k][0];
-        interlacedArray[(2*DIMENSION*k+1)] = pos[k][1];
-        interlacedArray[(2*DIMENSION*k+2)] = pos[k][2];
-
-       // Grab normal coordinates and store them as raw buffer
-        interlacedArray[(2*DIMENSION*k + DIMENSION) ] = 0;
-        interlacedArray[(2*DIMENSION*k + DIMENSION + 1)] = 0;
-        interlacedArray[(2*DIMENSION*k + DIMENSION + 2)] = 0;
-        
-    }
- 
-    return interlacedArray;
-}
 
 void loadPolygonSoup_PLY(std::string filename, std::vector<std::array<double, 3>>& vertexPositionsOut,
                          std::vector<std::vector<size_t>>& faceIndicesOut) {
@@ -170,12 +146,9 @@ void loadPolygonSoup_PLY(std::string filename, std::vector<std::array<double, 3>
 int main(int argc, char **argv) {
 
    
-    freopen("output.txt", "w", stdout);
+    //freopen("output.txt", "w", stdout);
     polyscope::init();
 
-    // std::unique_ptr<SurfaceMesh> mesh;
-    // std::unique_ptr<VertexPositionGeometry> geometry;
-    //std::tie(mesh, geometry) = readManifoldSurfaceMesh("hippo.ply");
     string filename = "hippo.ply";
 
     std::ifstream testStream(filename);
@@ -183,34 +156,34 @@ int main(int argc, char **argv) {
         return 0;
     }
     std::vector<std::array<Scalar, 3> > positions;
+
+    // not required here
     std::vector<std::vector<size_t>> faceIndicesOut;
+
     loadPolygonSoup_PLY(filename, positions, faceIndicesOut);
     testStream.close();
 
     int n = positions.size();
    
+    std::vector<std::array<Scalar, 3> >  tem_normal(n);
+
     // //Find normals for each positions in test fit.
     std::vector<std::array<Scalar, 3> >  normals;
 
-    Scalar *interlacedArray = buildInterlacedArray(positions);
-
-    cout <<"\n\n";
     int dim = 0;
-
     for(int i = 0; i < n; i++){
 
         // set evaluation point and scale at the first coordinate
-        VectorType p ({positions[i][0], positions[i][1],positions[i][2] });
+        VectorType p ({positions[i][0], positions[i][1],positions[i][2]});
         
         // Here we now perform the fit, starting from a raw interlaced buffer, without
         // any data duplication
         Fit fit;
-        VectorType  no = test_fit(fit, interlacedArray, n, p);
+        VectorType  no = test_fit(fit, positions, tem_normal, n, p);
         
-        cout << no <<   "\n\n";
+        //cout << no <<   "\n\n";
         
         normals.push_back({no[0], no[1], no[2]});   
-       
         dim += 2*DIMENSION; 
     }
     

@@ -4,6 +4,9 @@
 #include <vector>
 #include<stdio.h>
 #include "happly.h"
+#include <random>
+#include <string>
+#include <iterator>
 //Ponca
 #include <Ponca/src/Fitting/basket.h>
 #include <Ponca/src/Fitting/gls.h>
@@ -11,6 +14,8 @@
 #include <Ponca/src/Fitting/weightFunc.h>
 #include <Ponca/src/Fitting/weightKernel.h>
 #include "Eigen/Eigen"
+#include <Ponca/src/SpatialPartitioning/KdTree/kdTree.h>
+
 
 // Polyscope
 #include "polyscope/point_cloud.h"
@@ -50,9 +55,9 @@ public:
     typedef Eigen::Matrix<Scalar, Dim, 1>   VectorType;
     typedef Eigen::Matrix<Scalar, Dim, Dim> MatrixType;
  
-    PONCA_MULTIARCH inline MyPoint(std::array<Scalar, 3> poss, std::array<Scalar, 3>  tem_norm)
+    PONCA_MULTIARCH inline MyPoint(const std::array<Scalar, 3>&poss,const std::array<Scalar, 3>&  normm)
         : m_pos   (Eigen::Map< const VectorType >(poss.begin())),
-        m_normal(Eigen::Map< const VectorType >(tem_norm.begin()))
+        m_normal(Eigen::Map< const VectorType >(normm.begin()))
     {}
  
     PONCA_MULTIARCH inline const Eigen::Map< const VectorType >& pos()    const { return m_pos; }
@@ -69,66 +74,6 @@ typedef MyPoint::VectorType VectorType;
 // Define related structure
 typedef DistWeightFunc<MyPoint,SmoothWeightKernel<Scalar> > WeightFunc;
 typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> Fit;
- 
- 
-template<typename Fit>
-VectorType test_fit(Fit& _fit,
-              std::vector<std::array<Scalar, 3> > poss,
-              std::vector<std::array<Scalar, 3> > tem_norm,
-              int _n,
-              const VectorType& _p)
-{
-    Scalar tmax = 100.0;
- 
-    // Set a weighting function instance
-    _fit.setWeightFunc(WeightFunc(tmax));
- 
-    // Set the evaluation position
-    _fit.init(_p);
-
-    VectorType vec;
- 
-    // Iterate over samples and _fit the primitive
-    // A MyPoint instance is generated on the fly to bind the raw arrays to the
-    // library representation. No copy is done at this step.
-    for(int i = 0; i!= _n; i++)
-    {
-        _fit.addNeighbor(MyPoint(poss[i], tem_norm[i]));
-    }
- 
-    //finalize fitting
-    _fit.finalize();
- 
-    //Test if the fitting ended without errors
-    if(_fit.isStable())
-    {
-        // cout << "Center: [" << _fit.center().transpose() << "] ;  radius: " << _fit.radius() << endl;
- 
-        // cout << "Pratt normalization"
-        //     << (_fit.applyPrattNorm() ? " is now done." : " has already been applied.") << endl;
- 
-        // // Play with fitting output
-        // cout << "Value of the scalar field at the initial point: "
-        //     << _p.transpose()
-        //     << " is equal to " << _fit.potential(_p)
-        //     << endl;
- 
-        // cout << "It's gradient at this place is equal to: "
-        //     << _fit.primitiveGradient(_p).transpose()
-        //     << endl;
-        vec = _fit.primitiveGradient(_p).transpose();
- 
-        // cout << "Fitted Sphere: " << endl
-        //     << "\t Tau  : "      << _fit.tau()             << endl
-        //     << "\t Eta  : "      << _fit.eta().transpose() << endl
-        //     << "\t Kappa: "      << _fit.kappa()           << endl;
- 
-        // cout << "The initial point " << _p.transpose()              << endl
-        //     << "Is projected at   " << _fit.project(_p).transpose() << endl;
-    }
-
-    return vec;
-}
 
 
 void loadPolygonSoup_PLY(std::string filename, std::vector<std::array<double, 3>>& vertexPositionsOut,
@@ -164,27 +109,52 @@ int main(int argc, char **argv) {
     testStream.close();
 
     int n = positions.size();
-   
-    std::vector<std::array<Scalar, 3> >  tem_normal(n);
+    std::vector<VectorType >  normals(n);
+    
 
-    // //Find normals for each positions in test fit.
-    std::vector<std::array<Scalar, 3> >  normals;
+    vector<MyPoint> points;
+    for(int i = 0; i < n; i++){
+        points.push_back({positions[i], {0,0,0}});
+    }
+
+    Scalar tmax = 0.2;
+
+	KdTree<MyPoint> structure(points);
+
 
     int dim = 0;
     for(int i = 0; i < n; i++){
 
-        // set evaluation point and scale at the first coordinate
-        VectorType p ({positions[i][0], positions[i][1],positions[i][2]});
+        // set evaluation point and scale at the ith coordinate
         
-        // Here we now perform the fit, starting from a raw interlaced buffer, without
-        // any data duplication
+        const VectorType& p = points.at(i).pos();
+	
+        // Here we now perform the fit
         Fit fit;
-        VectorType  no = test_fit(fit, positions, tem_normal, n, p);
+        fit.init(p);
+
+        // Set a weighting function instance
+        fit.setWeightFunc(WeightFunc(tmax));
+    
+        // Iterate over samples and _fit the primitive
+        // A MyPoint instance is generated on the fly to bind the raw arrays to the
+        // library representation. No copy is done at this step.
+
+        vector<MyPoint> pos;
+        for (int j : structure.range_neighbors(p, tmax)) {
+			pos.push_back(points[i]);
+		}
+       
+        //test_fit(fit, points, structure.range_neighbors(p, tmax), tmax);
+        fit.compute( pos.begin(), pos.end() );
         
-        //cout << no <<   "\n\n";
+        //finalize fitting
+        fit.finalize();
         
-        normals.push_back({no[0], no[1], no[2]});   
-        dim += 2*DIMENSION; 
+        if(fit.isStable()){
+        normals[i] = fit.primitiveGradient(p).transpose();
+        }
+        
     }
     
     // visualize!

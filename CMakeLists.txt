@@ -33,5 +33,7 @@ add_subdirectory("deps/geometry-central")
     src/main.cpp
     )
 
+set_property(TARGET example PROPERTY CXX_STANDARD 17)
+
 # Link settings
 target_link_libraries(example polyscope Ponca::Fitting geometry-central)

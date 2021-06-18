@@ -8,11 +8,7 @@
 #include <string>
 #include <iterator>
 //Ponca
-#include <Ponca/src/Fitting/basket.h>
-#include <Ponca/src/Fitting/gls.h>
-#include <Ponca/src/Fitting/orientedSphereFit.h>
-#include <Ponca/src/Fitting/weightFunc.h>
-#include <Ponca/src/Fitting/weightKernel.h>
+#include <Ponca/Fitting>
 #include "Eigen/Eigen"
 #include <Ponca/src/SpatialPartitioning/KdTree/kdTree.h>
 
@@ -55,9 +51,10 @@ public:
     typedef Eigen::Matrix<Scalar, Dim, 1>   VectorType;
     typedef Eigen::Matrix<Scalar, Dim, Dim> MatrixType;
  
-    PONCA_MULTIARCH inline MyPoint(const std::array<Scalar, 3>&poss,const std::array<Scalar, 3>&  normm)
-        : m_pos   (Eigen::Map< const VectorType >(poss.begin())),
-        m_normal(Eigen::Map< const VectorType >(normm.begin()))
+    PONCA_MULTIARCH inline MyPoint(const std::array<Scalar, 3>&poss,
+                                   const std::array<Scalar, 3>&  norm)
+        : m_pos    (Eigen::Map< const VectorType >(poss.begin())),
+          m_normal (Eigen::Map< const VectorType >(norm.begin()))
     {}
  
     PONCA_MULTIARCH inline const Eigen::Map< const VectorType >& pos()    const { return m_pos; }
@@ -73,11 +70,11 @@ typedef MyPoint::VectorType VectorType;
  
 // Define related structure
 typedef DistWeightFunc<MyPoint,SmoothWeightKernel<Scalar> > WeightFunc;
-typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> Fit;
+typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
 
 
-void loadPolygonSoup_PLY(std::string filename, std::vector<std::array<double, 3>>& vertexPositionsOut,
-                         std::vector<std::vector<size_t>>& faceIndicesOut) {
+void loadPointCloud(std::string filename,
+                    std::vector<std::array<double, 3>>& vertexPositionsOut) {
 
   happly::PLYData plyIn(filename);
 
@@ -101,51 +98,41 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    std::vector<std::array<Scalar, 3> > positions;
-
-    // not required here
-    std::vector<std::vector<size_t>> faceIndicesOut;
-
-    loadPolygonSoup_PLY(filename, positions, faceIndicesOut);
+    // Load positions from file
+    std::vector< std::array<double, 3> > positions;
+    loadPointCloud(filename, positions);
     testStream.close();
 
     int n = positions.size();
-    std::vector<std::array<Scalar, 3> >  normals(n);
-    
+
+    std::vector< std::array<double, 3> >normals (n);
 
     vector<MyPoint> points;
     for(int i = 0; i < n; i++){
-        points.push_back({positions[i], {0,0,0}});
-
+        points.push_back({positions[i], normals[i]});
     }
    
 	KdTree<MyPoint> structure(points);
-    
+
+    Scalar tmax = 0.1;
+    int knei = 10;
+
     for(int i = 0; i < n; i++){
 
         // set evaluation point and scale at the ith coordinate
-        Scalar tmax = Eigen::internal::random<Scalar>(10, 25);
-        
         const VectorType& p = points.at(i).pos();
 	
         // Here we now perform the fit
-        Fit fit;
+        PlaneFit fit;
         // Set a weighting function instance
         fit.setWeightFunc(WeightFunc(tmax));
         // Set the evaluation position
         fit.init(p);
 
-
-        vector<MyPoint> pos;
-        for (const int &j : structure.k_nearest_neighbors(p, tmax)) {
-			pos.push_back(points[j]);
-       
-		}
-       
-
-       
-        //test_fit(fit, points, structure.range_neighbors(p, tmax), tmax);
-        fit.compute( pos.begin(), pos.end() );
+        for( auto idx : structure.k_nearest_neighbors(p, knei) ){
+            fit.addNeighbor( points[idx] );
+        }
+        fit.finalize();
         
         
         if(fit.isStable()){

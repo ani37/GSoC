@@ -83,7 +83,8 @@ void loadPointCloud(std::string filename,
 
 }
 
-void ComputeNormals(const KdTree<MyPoint> &_structure,const vector<MyPoint> &_points, vector<std::array<double, 3> > &_normals)
+void ComputeNormals(const KdTree<MyPoint> &_structure, 
+		    const vector<MyPoint> &_points, vector<std::array<double, 3> > &_normals)
 {
     // Making it local
     typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
@@ -117,7 +118,8 @@ void ComputeNormals(const KdTree<MyPoint> &_structure,const vector<MyPoint> &_po
     }
 }
 
-void ComputeCurvature(const KdTree<MyPoint> &_structure,const vector<MyPoint> &_points, std::vector<Scalar> &_Curvature)
+void ComputeCurvature(const KdTree<MyPoint> &_structure,
+		      const vector<MyPoint> &_points, std::vector<Scalar> &_Curvature)
 {
     // Making it local
     typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
@@ -157,7 +159,6 @@ void ComputeCurvature(const KdTree<MyPoint> &_structure,const vector<MyPoint> &_
 int main(int argc, char **argv) {
 
    
-    //freopen("output.txt", "w", stdout);
     polyscope::init();
 
     string filename = "hippo.ply";
@@ -184,7 +185,7 @@ int main(int argc, char **argv) {
         points.push_back({positions[i], normals[i]});
     }
    
-	KdTree<MyPoint> structure(points);
+    KdTree<MyPoint> structure(points);
 
     // run normal computation using CovariancePlaneFit
     ComputeNormals(structure, points, normals);

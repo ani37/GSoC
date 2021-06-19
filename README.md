@@ -1,6 +1,6 @@
-# libIGL, Polyscope & Ponca
+# About
 
-Demonstrates basic functionality and project setup for using Ponca and Polyscope with libIGL.
+Demonstrates basic functionality and project setup for using Ponca and Polyscope with Geometry-central.
 
 
 
@@ -22,4 +22,4 @@ make -j4
 ## Usage
 
 
-Check out `src/main.cpp` to see how easy it is! There are only 12 lines of Polyscope code in the whole demo to generate this visualization.
+Check out `src/main.cpp` to see the code.

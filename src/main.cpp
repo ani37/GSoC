@@ -2,22 +2,35 @@
 #include <algorithm>
 #include <iostream>
 #include <vector>
- 
-#include <Ponca/src/Fitting/basket.h>
-#include <Ponca/src/Fitting/gls.h>
-#include <Ponca/src/Fitting/orientedSphereFit.h>
-#include <Ponca/src/Fitting/weightFunc.h>
-#include <Ponca/src/Fitting/weightKernel.h>
- 
+#include<stdio.h>
+#include "happly.h"
+#include <random>
+#include <string>
+#include <iterator>
+//Ponca
+#include <Ponca/Fitting>
 #include "Eigen/Eigen"
- 
- 
+#include <Ponca/src/SpatialPartitioning/KdTree/kdTree.h>
 
+
+// Polyscope
 #include "polyscope/point_cloud.h"
+#include "polyscope/polyscope.h"
+#include "polyscope/surface_mesh.h"
+#include "geometrycentral/surface/manifold_surface_mesh.h"
+#include "geometrycentral/surface/meshio.h"
+#include "geometrycentral/surface/surface_mesh.h"
+#include "geometrycentral/surface/vertex_position_geometry.h"
+
 
 using namespace std;
 using namespace Ponca;
- 
+using namespace geometrycentral;
+using namespace geometrycentral::surface;
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
 #define DIMENSION 3
  
 /*
@@ -29,6 +42,7 @@ using namespace Ponca;
    In this example, we use this class to map an interlaced raw array containing
    both point normals and coordinates.
  */
+// This class defines the input data format
 class MyPoint
 {
 public:
@@ -37,9 +51,10 @@ public:
     typedef Eigen::Matrix<Scalar, Dim, 1>   VectorType;
     typedef Eigen::Matrix<Scalar, Dim, Dim> MatrixType;
  
-    PONCA_MULTIARCH inline MyPoint(Scalar* _interlacedArray, int _pId)
-        : m_pos   (Eigen::Map< const VectorType >(_interlacedArray + Dim*2*_pId  )),
-        m_normal(Eigen::Map< const VectorType >(_interlacedArray + Dim*2*_pId+Dim))
+    PONCA_MULTIARCH inline MyPoint(const std::array<Scalar, 3>&poss,
+                                   const std::array<Scalar, 3>&  norm)
+        : m_pos    (Eigen::Map< const VectorType >(poss.begin())),
+          m_normal (Eigen::Map< const VectorType >(norm.begin()))
     {}
  
     PONCA_MULTIARCH inline const Eigen::Map< const VectorType >& pos()    const { return m_pos; }
@@ -47,118 +62,88 @@ public:
  
 private:
     Eigen::Map< const VectorType > m_pos, m_normal;
-};
- 
+}; 
+
+
 typedef MyPoint::Scalar Scalar;
 typedef MyPoint::VectorType VectorType;
  
 // Define related structure
 typedef DistWeightFunc<MyPoint,SmoothWeightKernel<Scalar> > WeightFunc;
-typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> Fit;
- 
- 
-template<typename Fit>
-void test_fit(Fit& _fit,
-              Scalar* _interlacedArray,
-              int _n,
-              const VectorType& _p)
-{
-    Scalar tmax = 100.0;
- 
-    // Set a weighting function instance
-    _fit.setWeightFunc(WeightFunc(tmax));
- 
-    // Set the evaluation position
-    _fit.init(_p);
- 
-    // Iterate over samples and _fit the primitive
-    // A MyPoint instance is generated on the fly to bind the raw arrays to the
-    // library representation. No copy is done at this step.
-    for(int i = 0; i!= _n; i++)
-    {
-        _fit.addNeighbor(MyPoint(_interlacedArray, i));
-    }
- 
-    //finalize fitting
-    _fit.finalize();
- 
-    //Test if the fitting ended without errors
-    if(_fit.isStable())
-    {
-        cout << "Center: [" << _fit.center().transpose() << "] ;  radius: " << _fit.radius() << endl;
- 
-        cout << "Pratt normalization"
-            << (_fit.applyPrattNorm() ? " is now done." : " has already been applied.") << endl;
- 
-        // Play with fitting output
-        cout << "Value of the scalar field at the initial point: "
-            << _p.transpose()
-            << " is equal to " << _fit.potential(_p)
-            << endl;
- 
-        cout << "It's gradient at this place is equal to: "
-            << _fit.primitiveGradient(_p).transpose()
-            << endl;
- 
-        cout << "Fitted Sphere: " << endl
-            << "\t Tau  : "      << _fit.tau()             << endl
-            << "\t Eta  : "      << _fit.eta().transpose() << endl
-            << "\t Kappa: "      << _fit.kappa()           << endl;
- 
-        cout << "The initial point " << _p.transpose()              << endl
-            << "Is projected at   " << _fit.project(_p).transpose() << endl;
-    }
+typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
+
+
+void loadPointCloud(std::string filename,
+                    std::vector<std::array<double, 3>>& vertexPositionsOut) {
+
+  happly::PLYData plyIn(filename);
+
+  // Get mesh-style data from the object
+  vertexPositionsOut = plyIn.getVertexPositions();
+  //faceIndicesOut = plyIn.getFaceIndices<size_t>();
+
 }
  
-// Build an interlaced array containing _n position and normal vectors
-Scalar* buildInterlacedArray(int _n, vector<std::array<Scalar,DIMENSION > > pos, vector<std::array<Scalar,DIMENSION > > norms )
-{
-    Scalar* interlacedArray = new Scalar[uint8_t(2*DIMENSION*_n)];
- 
-    for(int k=0; k<_n; ++k)
-    {
-        // For the simplicity of this example, we use Eigen Vectors to compute
-        // both coordinates and normals, and then copy the raw values to an
-        // interlaced array, discarding the Eigen representation.
-        Eigen::Matrix<Scalar, DIMENSION, 1> nvec = Eigen::Matrix<Scalar, DIMENSION, 1>::Random().normalized();
-        Eigen::Matrix<Scalar, DIMENSION, 1> pvec = nvec * Eigen::internal::random<Scalar>(0.9,1.1);
-       
- 
-        // Grab coordinates and store them as raw buffer
-        memcpy(interlacedArray+2*DIMENSION*k,           pvec.data(), DIMENSION*sizeof(Scalar));
-        memcpy(interlacedArray+2*DIMENSION*k+DIMENSION, nvec.data(), DIMENSION*sizeof(Scalar));
- 
-    }
- 
-    return interlacedArray;
-}
- 
-int main()
-{
-    // Build arrays containing normals and positions, simulating data coming from
-    // outside the library.
-    // initialise
+
+int main(int argc, char **argv) {
+
+   
+    //freopen("output.txt", "w", stdout);
     polyscope::init();
-    
-    int n = 10;
-    vector<std::array<Scalar,DIMENSION > > pos, norms;
 
-    Scalar *interlacedArray = buildInterlacedArray(n, pos, norms);
- 
-    // set evaluation point and scale at the first coordinate
-    VectorType p (interlacedArray);
+    string filename = "hippo.ply";
 
+    std::ifstream testStream(filename);
+    if (!testStream) {
+        return 0;
+    }
 
-    
-    // Here we now perform the fit, starting from a raw interlaced buffer, without
-    // any data duplication
-    Fit fit;
-    test_fit(fit, interlacedArray, n, p);
+    // Load positions from file
+    std::vector< std::array<double, 3> > positions;
+    loadPointCloud(filename, positions);
+    testStream.close();
 
-    
+    int n = positions.size();
+
+    std::vector< std::array<double, 3> >normals (n);
+
+    vector<MyPoint> points;
+    for(int i = 0; i < n; i++){
+        points.push_back({positions[i], normals[i]});
+    }
+   
+	KdTree<MyPoint> structure(points);
+
+    Scalar tmax = 0.1;
+    int knei = 10;
+
+    for(int i = 0; i < n; i++){
+
+        // set evaluation point and scale at the ith coordinate
+        const VectorType& p = points.at(i).pos();
+	
+        // Here we now perform the fit
+        PlaneFit fit;
+        // Set a weighting function instance
+        fit.setWeightFunc(WeightFunc(tmax));
+        // Set the evaluation position
+        fit.init(p);
+
+        for( auto idx : structure.k_nearest_neighbors(p, knei) ){
+            fit.addNeighbor( points[idx] );
+        }
+        fit.finalize();
+        
+        
+        if(fit.isStable()){
+            VectorType no = fit.primitiveGradient(p).transpose();
+            normals[i] = {no[0],no[1], no[2]};
+        }
+    }
 
     // visualize!
-    polyscope::registerPointCloud("positions", pos);
-    polyscope::registerPointCloud("normals", norms);
-    polyscope::show();
+      polyscope::registerPointCloud("positions", positions);
+      polyscope::getPointCloud("positions")->addVectorQuantity("normals", normals);
+      
+      polyscope::show();
 }

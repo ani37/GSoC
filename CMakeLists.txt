@@ -24,11 +24,16 @@ add_subdirectory("deps/polyscope")
 message("\n\n == CMAKE recursively building Polyscope\n")
 add_subdirectory("deps/ponca")
 
+# Add geometry-central
+message("\n\n == CMAKE recursively building geometry-central\n")
+add_subdirectory("deps/geometry-central")
   # Create an executable
   add_executable(
     example
     src/main.cpp
     )
 
+set_property(TARGET example PROPERTY CXX_STANDARD 17)
+
 # Link settings
-target_link_libraries(example polyscope Ponca::Fitting)
+target_link_libraries(example polyscope Ponca::Fitting geometry-central)

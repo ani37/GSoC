@@ -70,7 +70,6 @@ typedef MyPoint::VectorType VectorType;
  
 // Define related structure
 typedef DistWeightFunc<MyPoint,SmoothWeightKernel<Scalar> > WeightFunc;
-typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
 
 
 void loadPointCloud(std::string filename,
@@ -83,7 +82,77 @@ void loadPointCloud(std::string filename,
   //faceIndicesOut = plyIn.getFaceIndices<size_t>();
 
 }
- 
+
+void ComputeNormals(const KdTree<MyPoint> &_structure,const vector<MyPoint> &_points, vector<std::array<double, 3> > &_normals)
+{
+    // Making it local
+    typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
+
+    Scalar tmax = 0.1;
+    int knei = 10;
+    
+
+    for(int i = 0; i < _points.size(); i++){
+
+        // set evaluation point and scale at the ith coordinate
+        const VectorType& p = _points.at(i).pos();
+	
+        // Here we now perform the fit
+        PlaneFit _fit;
+        // Set a weighting function instance
+        _fit.setWeightFunc(WeightFunc(tmax));
+        // Set the evaluation position
+        _fit.init(p);
+
+        for( auto idx : _structure.k_nearest_neighbors(p, knei) ){
+            _fit.addNeighbor( _points[idx] );
+        }
+        _fit.finalize();
+        
+        
+        if(_fit.isStable()){
+            VectorType no = _fit.primitiveGradient(p).transpose();
+            _normals[i] = {no[0],no[1], no[2]};
+        }
+    }
+}
+
+void ComputeCurvature(const KdTree<MyPoint> &_structure,const vector<MyPoint> &_points, std::vector<Scalar> &_Curvature)
+{
+    // Making it local
+    typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
+
+    Scalar tmax = 0.1;
+    int knei = 10;
+    
+
+    for(int i = 0; i < _points.size(); i++){
+
+        // set evaluation point and scale at the ith coordinate
+        const VectorType& p = _points.at(i).pos();
+	
+        // Here we now perform the fit
+        SphereFit _fit;
+        // Set a weighting function instance
+        _fit.setWeightFunc(WeightFunc(tmax));
+        // Set the evaluation position
+        _fit.init(p);
+
+        for( auto idx : _structure.k_nearest_neighbors(p, knei) ){
+            _fit.addNeighbor( _points[idx] );
+        }
+        _fit.finalize();
+        
+        
+        if(_fit.isStable()){
+            _Curvature[i] = _fit.kappa();
+
+        }
+    }
+}
+
+
+
 
 int main(int argc, char **argv) {
 
@@ -106,6 +175,9 @@ int main(int argc, char **argv) {
     int n = positions.size();
 
     std::vector< std::array<double, 3> >normals (n);
+    std::vector<Scalar> curvature(n);
+    
+ 
 
     vector<MyPoint> points;
     for(int i = 0; i < n; i++){
@@ -114,36 +186,17 @@ int main(int argc, char **argv) {
    
 	KdTree<MyPoint> structure(points);
 
-    Scalar tmax = 0.1;
-    int knei = 10;
-
-    for(int i = 0; i < n; i++){
-
-        // set evaluation point and scale at the ith coordinate
-        const VectorType& p = points.at(i).pos();
-	
-        // Here we now perform the fit
-        PlaneFit fit;
-        // Set a weighting function instance
-        fit.setWeightFunc(WeightFunc(tmax));
-        // Set the evaluation position
-        fit.init(p);
-
-        for( auto idx : structure.k_nearest_neighbors(p, knei) ){
-            fit.addNeighbor( points[idx] );
-        }
-        fit.finalize();
-        
-        
-        if(fit.isStable()){
-            VectorType no = fit.primitiveGradient(p).transpose();
-            normals[i] = {no[0],no[1], no[2]};
-        }
-    }
+    // run normal computation using CovariancePlaneFit
+    ComputeNormals(structure, points, normals);
+    //run curvature computation using OrientedSphereFit
+    ComputeCurvature(structure, points, curvature);
+    
 
     // visualize!
-      polyscope::registerPointCloud("positions", positions);
-      polyscope::getPointCloud("positions")->addVectorQuantity("normals", normals);
+    polyscope::registerPointCloud("positions", positions);
+    polyscope::getPointCloud("positions")->addVectorQuantity("normals", normals);
+    polyscope::getPointCloud("positions")->addScalarQuantity("curvature", curvature);
+
       
-      polyscope::show();
+      polyscope::show();    
 }

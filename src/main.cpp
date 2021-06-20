@@ -68,6 +68,11 @@ private:
 typedef MyPoint::Scalar Scalar;
 typedef MyPoint::VectorType VectorType;
  
+std::vector< std::array<double, 3> > positions, normals;
+vector<MyPoint> points;
+
+
+
 // Define related structure
 typedef DistWeightFunc<MyPoint,SmoothWeightKernel<Scalar> > WeightFunc;
 
@@ -83,19 +88,23 @@ void loadPointCloud(std::string filename,
 
 }
 
-void ComputeNormals(const KdTree<MyPoint> &_structure,const vector<MyPoint> &_points, vector<std::array<double, 3> > &_normals)
+
+
+Scalar tmax = 0.1;
+int knei = 10;
+
+void ComputeNormals()
 {
     // Making it local
     typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
 
-    Scalar tmax = 0.1;
-    int knei = 10;
     
+    KdTree<MyPoint> structure(points);
 
-    for(int i = 0; i < _points.size(); i++){
+    for(int i = 0; i < points.size(); i++){
 
         // set evaluation point and scale at the ith coordinate
-        const VectorType& p = _points.at(i).pos();
+        const VectorType& p = points.at(i).pos();
 	
         // Here we now perform the fit
         PlaneFit _fit;
@@ -104,32 +113,31 @@ void ComputeNormals(const KdTree<MyPoint> &_structure,const vector<MyPoint> &_po
         // Set the evaluation position
         _fit.init(p);
 
-        for( auto idx : _structure.k_nearest_neighbors(p, knei) ){
-            _fit.addNeighbor( _points[idx] );
+        for( auto idx : structure.k_nearest_neighbors(p, knei) ){
+            _fit.addNeighbor( points[idx] );
         }
         _fit.finalize();
         
         
         if(_fit.isStable()){
             VectorType no = _fit.primitiveGradient(p).transpose();
-            _normals[i] = {no[0],no[1], no[2]};
+            normals.push_back({no[0],no[1], no[2]});
         }
     }
+    polyscope::getPointCloud("positions")->addVectorQuantity("normals", normals);
 }
 
-void ComputeCurvature(const KdTree<MyPoint> &_structure,const vector<MyPoint> &_points, std::vector<Scalar> &_Curvature)
-{
+void ComputeCurvature()
+{ 
     // Making it local
     typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
 
-    Scalar tmax = 0.1;
-    int knei = 10;
-    
-
-    for(int i = 0; i < _points.size(); i++){
+    std::vector<Scalar> curvature;
+    KdTree<MyPoint> structure(points);
+    for(int i = 0; i < points.size(); i++){
 
         // set evaluation point and scale at the ith coordinate
-        const VectorType& p = _points.at(i).pos();
+        const VectorType& p = points.at(i).pos();
 	
         // Here we now perform the fit
         SphereFit _fit;
@@ -138,17 +146,48 @@ void ComputeCurvature(const KdTree<MyPoint> &_structure,const vector<MyPoint> &_
         // Set the evaluation position
         _fit.init(p);
 
-        for( auto idx : _structure.k_nearest_neighbors(p, knei) ){
-            _fit.addNeighbor( _points[idx] );
+        for( auto idx : structure.k_nearest_neighbors(p, knei) ){
+            _fit.addNeighbor( points[idx] );
         }
         _fit.finalize();
         
         
         if(_fit.isStable()){
-            _Curvature[i] = _fit.kappa();
-
+            curvature.push_back(_fit.kappa());
         }
     }
+    polyscope::getPointCloud("positions")->addScalarQuantity("curvature", curvature);
+}
+
+
+// Your callback functions
+void myCallback() {
+
+  // Since options::openImGuiWindowForUserCallback == true by default, 
+  // we can immediately start using ImGui commands to build a UI
+
+  ImGui::PushItemWidth(100); // Make ui elements 100 pixels wide,
+                             // instead of full width. Must have 
+                             // matching PopItemWidth() below.
+  static int numPoints = 2000;
+  static float param = 3.14;
+
+//   ImGui::InputInt("num points", &nPts);             // set a int variable
+//   ImGui::InputFloat("param value", &anotherParam);  // set a float variable
+
+  if (ImGui::Button("Compute Curvature")) {
+    // executes when button is pressed
+    ComputeCurvature();
+  }
+  ImGui::SameLine();
+  if (ImGui::Button("Compute Normals")) {
+    // executes when button is pressed
+    ComputeNormals();
+  } 
+  ImGui::InputDouble("Select Scale Size", &tmax);  // set a double variable
+  ImGui::InputInt("Change Size of K", &knei);  // set a float variable
+
+  ImGui::PopItemWidth();
 }
 
 
@@ -168,35 +207,29 @@ int main(int argc, char **argv) {
     }
 
     // Load positions from file
-    std::vector< std::array<double, 3> > positions;
     loadPointCloud(filename, positions);
     testStream.close();
 
     int n = positions.size();
 
-    std::vector< std::array<double, 3> >normals (n);
-    std::vector<Scalar> curvature(n);
-    
- 
 
-    vector<MyPoint> points;
     for(int i = 0; i < n; i++){
-        points.push_back({positions[i], normals[i]});
+        points.push_back({positions[i], {0,0,0}});
     }
    
-	KdTree<MyPoint> structure(points);
 
-    // run normal computation using CovariancePlaneFit
-    ComputeNormals(structure, points, normals);
-    //run curvature computation using OrientedSphereFit
-    ComputeCurvature(structure, points, curvature);
-    
+    // // run normal computation using CovariancePlaneFit
+    // ComputeNormals(structure, points, normals);
+    // //run curvature computation using OrientedSphereFit
+    // ComputeCurvature(structure, points, curvature);
+
 
     // visualize!
     polyscope::registerPointCloud("positions", positions);
-    polyscope::getPointCloud("positions")->addVectorQuantity("normals", normals);
-    polyscope::getPointCloud("positions")->addScalarQuantity("curvature", curvature);
-
-      
-      polyscope::show();    
+    
+    // Add the callback  
+    polyscope::state::userCallback = myCallback;
+    // Show the gui
+    polyscope::show(); 
+    return 0;   
 }

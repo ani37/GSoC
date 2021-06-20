@@ -14,9 +14,8 @@ cd build
 cmake ..
 make -j4
 
-./bin/example ../bunnyhead.obj
+./bin/example 
 
-./bin/example ../spot.obj
 ```
 
 ## Usage

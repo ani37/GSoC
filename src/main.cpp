@@ -16,17 +16,10 @@
 // Polyscope
 #include "polyscope/point_cloud.h"
 #include "polyscope/polyscope.h"
-#include "polyscope/surface_mesh.h"
-#include "geometrycentral/surface/manifold_surface_mesh.h"
-#include "geometrycentral/surface/meshio.h"
-#include "geometrycentral/surface/surface_mesh.h"
-#include "geometrycentral/surface/vertex_position_geometry.h"
-
 
 using namespace std;
 using namespace Ponca;
-using namespace geometrycentral;
-using namespace geometrycentral::surface;
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -68,7 +61,6 @@ private:
 typedef MyPoint::Scalar Scalar;
 typedef MyPoint::VectorType VectorType;
  
-std::vector< std::array<double, 3> > positions, normals;
 vector<MyPoint> points;
 
 
@@ -98,7 +90,7 @@ void ComputeNormals()
     // Making it local
     typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
 
-    
+    std::vector< std::array<double, 3> > normals;    
     KdTree<MyPoint> structure(points);
 
     for(int i = 0; i < points.size(); i++){
@@ -184,8 +176,8 @@ void myCallback() {
     // executes when button is pressed
     ComputeNormals();
   } 
-  ImGui::InputDouble("Select Scale Size", &tmax);  // set a double variable
-  ImGui::InputInt("Change Size of K", &knei);  // set a float variable
+  ImGui::InputDouble("Scalar attribute", &tmax);  // set a double variable
+  ImGui::InputInt("Variable K", &knei);  // set a float variable
 
   ImGui::PopItemWidth();
 }
@@ -196,7 +188,6 @@ void myCallback() {
 int main(int argc, char **argv) {
 
    
-    //freopen("output.txt", "w", stdout);
     polyscope::init();
 
     string filename = "hippo.ply";
@@ -206,6 +197,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
+    std::vector< std::array<double, 3> > positions;
     // Load positions from file
     loadPointCloud(filename, positions);
     testStream.close();

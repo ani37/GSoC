@@ -32,8 +32,7 @@ using namespace Ponca;
    Using this approach, ones can use the patate library with already existing
    data-structures and without any data-duplication.
  
-   In this example, we use this class to map an interlaced raw array containing
-   both point normals and coordinates.
+   In this example, we use this class to find Normals and curvature  from a polygon file using KdTree.
  */
 // This class defines the input data format
 class MyPoint
@@ -85,7 +84,8 @@ void loadPointCloud(std::string filename,
 Scalar tmax = 0.1;
 int knei = 10;
 
-void ComputeNormals()
+// Using KNN
+void ComputeNormalsKnn()
 {
     // Making it local
     typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
@@ -116,10 +116,10 @@ void ComputeNormals()
             normals.push_back({no[0],no[1], no[2]});
         }
     }
-    polyscope::getPointCloud("positions")->addVectorQuantity("normals", normals);
+    polyscope::getPointCloud("positions")->addVectorQuantity("normals_knn", normals);
 }
 
-void ComputeCurvature()
+void ComputeCurvatureKnn()
 { 
     // Making it local
     typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
@@ -148,7 +148,74 @@ void ComputeCurvature()
             curvature.push_back(_fit.kappa());
         }
     }
-    polyscope::getPointCloud("positions")->addScalarQuantity("curvature", curvature);
+    polyscope::getPointCloud("positions")->addScalarQuantity("curvature_knn", curvature);
+}
+
+//Using range Neighbours 
+void ComputeNormalsRangeN()
+{
+    // Making it local
+    typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
+
+    std::vector< std::array<double, 3> > normals;    
+    KdTree<MyPoint> structure(points);
+
+    for(int i = 0; i < points.size(); i++){
+
+        // set evaluation point and scale at the ith coordinate
+        const VectorType& p = points.at(i).pos();
+	
+        // Here we now perform the fit
+        PlaneFit _fit;
+        // Set a weighting function instance
+        _fit.setWeightFunc(WeightFunc(tmax));
+        // Set the evaluation position
+        _fit.init(p);
+
+        for( auto idx : structure.range_neighbors(p, tmax) ){
+            _fit.addNeighbor( points[idx] );
+        }
+        _fit.finalize();
+        
+        
+        if(_fit.isStable()){
+            VectorType no = _fit.primitiveGradient(p).transpose();
+            normals.push_back({no[0],no[1], no[2]});
+        }
+    }
+    polyscope::getPointCloud("positions")->addVectorQuantity("normals_RangeN", normals);
+}
+
+void ComputeCurvatureRangeN()
+{ 
+    // Making it local
+    typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
+
+    std::vector<Scalar> curvature;
+    KdTree<MyPoint> structure(points);
+    for(int i = 0; i < points.size(); i++){
+
+        // set evaluation point and scale at the ith coordinate
+        const VectorType& p = points.at(i).pos();
+	
+        // Here we now perform the fit
+        SphereFit _fit;
+        // Set a weighting function instance
+        _fit.setWeightFunc(WeightFunc(tmax));
+        // Set the evaluation position
+        _fit.init(p);
+
+        for( auto idx : structure.range_neighbors(p, tmax) ){
+            _fit.addNeighbor( points[idx] );
+        }
+        _fit.finalize();
+        
+        
+        if(_fit.isStable()){
+            curvature.push_back(_fit.kappa());
+        }
+    }
+    polyscope::getPointCloud("positions")->addScalarQuantity("curvature_RangeN", curvature);
 }
 
 
@@ -161,21 +228,20 @@ void myCallback() {
   ImGui::PushItemWidth(100); // Make ui elements 100 pixels wide,
                              // instead of full width. Must have 
                              // matching PopItemWidth() below.
-  static int numPoints = 2000;
-  static float param = 3.14;
-
-//   ImGui::InputInt("num points", &nPts);             // set a int variable
-//   ImGui::InputFloat("param value", &anotherParam);  // set a float variable
 
   if (ImGui::Button("Compute Curvature")) {
     // executes when button is pressed
-    ComputeCurvature();
+    ComputeCurvatureKnn();
+   // ComputeCurvatureRangeN();
   }
   ImGui::SameLine();
+
   if (ImGui::Button("Compute Normals")) {
     // executes when button is pressed
-    ComputeNormals();
+    ComputeNormalsKnn();
+    //ComputeNormalsRangeN();
   } 
+
   ImGui::InputDouble("Scalar attribute", &tmax);  // set a double variable
   ImGui::InputInt("Variable K", &knei);  // set a float variable
 
@@ -209,11 +275,6 @@ int main(int argc, char **argv) {
         points.push_back({positions[i], {0,0,0}});
     }
    
-
-    // // run normal computation using CovariancePlaneFit
-    // ComputeNormals(structure, points, normals);
-    // //run curvature computation using OrientedSphereFit
-    // ComputeCurvature(structure, points, curvature);
 
 
     // visualize!

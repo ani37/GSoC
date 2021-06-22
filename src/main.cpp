@@ -16,17 +16,10 @@
 // Polyscope
 #include "polyscope/point_cloud.h"
 #include "polyscope/polyscope.h"
-#include "polyscope/surface_mesh.h"
-#include "geometrycentral/surface/manifold_surface_mesh.h"
-#include "geometrycentral/surface/meshio.h"
-#include "geometrycentral/surface/surface_mesh.h"
-#include "geometrycentral/surface/vertex_position_geometry.h"
-
 
 using namespace std;
 using namespace Ponca;
-using namespace geometrycentral;
-using namespace geometrycentral::surface;
+
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -39,8 +32,7 @@ using namespace geometrycentral::surface;
    Using this approach, ones can use the patate library with already existing
    data-structures and without any data-duplication.
  
-   In this example, we use this class to map an interlaced raw array containing
-   both point normals and coordinates.
+   In this example, we use this class to find Normals and curvature  from a polygon file using KdTree.
  */
 // This class defines the input data format
 class MyPoint
@@ -68,10 +60,12 @@ private:
 typedef MyPoint::Scalar Scalar;
 typedef MyPoint::VectorType VectorType;
  
+vector<MyPoint> points;
+
+
+
 // Define related structure
 typedef DistWeightFunc<MyPoint,SmoothWeightKernel<Scalar> > WeightFunc;
-typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
-
 
 void loadPointCloud(std::string filename,
                     std::vector<std::array<double, 3>>& vertexPositionsOut) {
@@ -83,12 +77,168 @@ void loadPointCloud(std::string filename,
   //faceIndicesOut = plyIn.getFaceIndices<size_t>();
 
 }
- 
+
+
+int knei = 10;
+Scalar tmax = 0.1;
+
+// to compute normals generalised using template and functors using KNN
+template<typename FitT, typename Functor>
+void computeKnn(const KdTree<MyPoint>& structure, Functor f)
+{
+
+
+    for(int i = 0; i < points.size(); i++){
+        // set evaluation point and scale at the ith coordinate
+        const VectorType& p = points.at(i).pos();
+        // Here we now perform the fit
+        FitT _fit;
+        // Set a weighting function instance
+        _fit.setWeightFunc(WeightFunc(tmax));
+        // Set the evaluation position
+        _fit.init(p);
+        for( auto idx : structure.k_nearest_neighbors(p, knei) ){
+            _fit.addNeighbor( points[idx] );
+        }
+        _fit.finalize();
+	     f( i, _fit );
+    }
+}
+
+// to compute normals generalised using template and functors using Range Neighbors
+template<typename FitT, typename Functor>
+void computeRangeNeighbors(const KdTree<MyPoint>& structure, Functor f)
+{
+
+    
+    for(int i = 0; i < points.size(); i++){
+        // set evaluation point and scale at the ith coordinate
+        const VectorType& p = points.at(i).pos();
+        // Here we now perform the fit
+        FitT _fit;
+        // Set a weighting function instance
+        _fit.setWeightFunc(WeightFunc(tmax));
+        // Set the evaluation position
+        _fit.init(p);
+        for( auto idx : structure.range_neighbors(p, tmax) ){
+            _fit.addNeighbor( points[idx] );
+        }
+        _fit.finalize();
+	     f( i, _fit );
+    }
+}
+
+
+// Your callback functions
+void myCallback() {
+
+  // Since options::openImGuiWindowForUserCallback == true by default, 
+  // we can immediately start using ImGui commands to build a UI
+
+  ImGui::PushItemWidth(100); // Make ui elements 100 pixels wide,
+                             // instead of full width. Must have 
+                             // matching PopItemWidth() below.
+                            
+  
+
+  KdTree<MyPoint> kdtree(points);
+
+  // KNN
+
+  if(ImGui::Button("Compute curvature with knn")) {
+
+    typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
+
+    std::vector< Scalar > curvature(points.size());  
+    
+    computeKnn<SphereFit>( kdtree, [&curvature]( int i, const SphereFit& _fit ) // c++lambda
+	{
+	   if( _fit.isStable() ){
+            curvature[i] = _fit.kappa();  
+
+        } 
+        else
+	     curvature[i] = 0;  
+	}
+    );
+    polyscope::getPointCloud("positions")->addScalarQuantity("curvature_knn", curvature);
+  }
+
+  ImGui::SameLine();
+
+  if (ImGui::Button("Compute Normals with knn")) {
+    typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
+
+    std::vector< std::array<double, 3> > normals(points.size());  
+    
+    computeKnn<PlaneFit>( kdtree, [&normals]( int i, const PlaneFit& _fit ) // c++lambda
+	{
+	   if( _fit.isStable() ){
+              VectorType no = _fit.primitiveGradient(points.at(i).pos());
+              normals[i] = {no[0],no[1], no[2]};
+           } else
+	      normals[i] = {0,0,0};
+	}
+    );
+    polyscope::getPointCloud("positions")->addVectorQuantity("normals_knn", normals);
+  } 
+
+
+  // RN
+
+  if(ImGui::Button("Compute curvature with RN")) {
+
+    typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
+
+    std::vector< Scalar > curvature(points.size());  
+    
+    computeRangeNeighbors<SphereFit>( kdtree, [&curvature]( int i, const SphereFit& _fit ) // c++lambda
+	{
+	   if( _fit.isStable() ){
+            curvature[i] = _fit.kappa();  
+
+        } 
+        else
+	     curvature[i] = 0;  
+	}
+    );
+    polyscope::getPointCloud("positions")->addScalarQuantity("curvature_RN", curvature);
+  }
+
+  ImGui::SameLine();
+
+  if (ImGui::Button("Compute Normals with RN")) {
+    typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
+
+    std::vector< std::array<double, 3> > normals(points.size());  
+    
+    computeRangeNeighbors<PlaneFit>( kdtree, [&normals]( int i, const PlaneFit& _fit ) // c++lambda
+	{
+	   if( _fit.isStable() ){
+              VectorType no = _fit.primitiveGradient(points.at(i).pos());
+              normals[i] = {no[0],no[1], no[2]};
+           } else
+	      normals[i] = {0,0,0};
+	}
+    );
+
+    polyscope::getPointCloud("positions")->addVectorQuantity("normals_RN", normals);
+  } 
+
+
+  
+  ImGui::InputDouble("Scalar attribute", &tmax);  // set a double variable
+  ImGui::InputInt("Variable K", &knei);  // set a float variable
+
+  ImGui::PopItemWidth();
+}
+
+
+
 
 int main(int argc, char **argv) {
 
    
-    //freopen("output.txt", "w", stdout);
     polyscope::init();
 
     string filename = "hippo.ply";
@@ -98,52 +248,26 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    // Load positions from file
     std::vector< std::array<double, 3> > positions;
+    // Load positions from file
     loadPointCloud(filename, positions);
     testStream.close();
 
     int n = positions.size();
 
-    std::vector< std::array<double, 3> >normals (n);
 
-    vector<MyPoint> points;
     for(int i = 0; i < n; i++){
-        points.push_back({positions[i], normals[i]});
+        points.push_back({positions[i], {0,0,0}});
     }
    
-	KdTree<MyPoint> structure(points);
 
-    Scalar tmax = 0.1;
-    int knei = 10;
-
-    for(int i = 0; i < n; i++){
-
-        // set evaluation point and scale at the ith coordinate
-        const VectorType& p = points.at(i).pos();
-	
-        // Here we now perform the fit
-        PlaneFit fit;
-        // Set a weighting function instance
-        fit.setWeightFunc(WeightFunc(tmax));
-        // Set the evaluation position
-        fit.init(p);
-
-        for( auto idx : structure.k_nearest_neighbors(p, knei) ){
-            fit.addNeighbor( points[idx] );
-        }
-        fit.finalize();
-        
-        
-        if(fit.isStable()){
-            VectorType no = fit.primitiveGradient(p).transpose();
-            normals[i] = {no[0],no[1], no[2]};
-        }
-    }
 
     // visualize!
-      polyscope::registerPointCloud("positions", positions);
-      polyscope::getPointCloud("positions")->addVectorQuantity("normals", normals);
-      
-      polyscope::show();
+    polyscope::registerPointCloud("positions", positions);
+    
+    // Add the callback  
+    polyscope::state::userCallback = myCallback;
+    // Show the gui
+    polyscope::show(); 
+    return 0;   
 }

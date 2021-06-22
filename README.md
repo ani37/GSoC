@@ -12,7 +12,6 @@ cd GSoC
 mkdir build
 cd build
 cmake ..
-make -j4
 
 ./bin/example 
 

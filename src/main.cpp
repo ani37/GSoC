@@ -67,7 +67,6 @@ vector<MyPoint> points;
 // Define related structure
 typedef DistWeightFunc<MyPoint,SmoothWeightKernel<Scalar> > WeightFunc;
 
-
 void loadPointCloud(std::string filename,
                     std::vector<std::array<double, 3>>& vertexPositionsOut) {
 
@@ -80,142 +79,53 @@ void loadPointCloud(std::string filename,
 }
 
 
-
-Scalar tmax = 0.1;
 int knei = 10;
+Scalar tmax = 0.1;
 
-// Using KNN
-void ComputeNormalsKnn()
+// to compute normals generalised using template and functors using KNN
+template<typename FitT, typename Functor>
+void computeKnn(const KdTree<MyPoint>& structure, Functor f)
 {
-    // Making it local
-    typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
 
-    std::vector< std::array<double, 3> > normals;    
-    KdTree<MyPoint> structure(points);
 
     for(int i = 0; i < points.size(); i++){
-
         // set evaluation point and scale at the ith coordinate
         const VectorType& p = points.at(i).pos();
-	
         // Here we now perform the fit
-        PlaneFit _fit;
+        FitT _fit;
         // Set a weighting function instance
         _fit.setWeightFunc(WeightFunc(tmax));
         // Set the evaluation position
         _fit.init(p);
-
         for( auto idx : structure.k_nearest_neighbors(p, knei) ){
             _fit.addNeighbor( points[idx] );
         }
         _fit.finalize();
-        
-        
-        if(_fit.isStable()){
-            VectorType no = _fit.primitiveGradient(p).transpose();
-            normals.push_back({no[0],no[1], no[2]});
-        }
+	     f( i, _fit );
     }
-    polyscope::getPointCloud("positions")->addVectorQuantity("normals_knn", normals);
 }
 
-void ComputeCurvatureKnn()
-{ 
-    // Making it local
-    typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
-
-    std::vector<Scalar> curvature;
-    KdTree<MyPoint> structure(points);
-    for(int i = 0; i < points.size(); i++){
-
-        // set evaluation point and scale at the ith coordinate
-        const VectorType& p = points.at(i).pos();
-	
-        // Here we now perform the fit
-        SphereFit _fit;
-        // Set a weighting function instance
-        _fit.setWeightFunc(WeightFunc(tmax));
-        // Set the evaluation position
-        _fit.init(p);
-
-        for( auto idx : structure.k_nearest_neighbors(p, knei) ){
-            _fit.addNeighbor( points[idx] );
-        }
-        _fit.finalize();
-        
-        
-        if(_fit.isStable()){
-            curvature.push_back(_fit.kappa());
-        }
-    }
-    polyscope::getPointCloud("positions")->addScalarQuantity("curvature_knn", curvature);
-}
-
-//Using range Neighbours 
-void ComputeNormalsRangeN()
+// to compute normals generalised using template and functors using Range Neighbors
+template<typename FitT, typename Functor>
+void computeRangeNeighbors(const KdTree<MyPoint>& structure, Functor f)
 {
-    // Making it local
-    typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
 
-    std::vector< std::array<double, 3> > normals;    
-    KdTree<MyPoint> structure(points);
-
+    
     for(int i = 0; i < points.size(); i++){
-
         // set evaluation point and scale at the ith coordinate
         const VectorType& p = points.at(i).pos();
-	
         // Here we now perform the fit
-        PlaneFit _fit;
+        FitT _fit;
         // Set a weighting function instance
         _fit.setWeightFunc(WeightFunc(tmax));
         // Set the evaluation position
         _fit.init(p);
-
         for( auto idx : structure.range_neighbors(p, tmax) ){
             _fit.addNeighbor( points[idx] );
         }
         _fit.finalize();
-        
-        
-        if(_fit.isStable()){
-            VectorType no = _fit.primitiveGradient(p).transpose();
-            normals.push_back({no[0],no[1], no[2]});
-        }
+	     f( i, _fit );
     }
-    polyscope::getPointCloud("positions")->addVectorQuantity("normals_RangeN", normals);
-}
-
-void ComputeCurvatureRangeN()
-{ 
-    // Making it local
-    typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
-
-    std::vector<Scalar> curvature;
-    KdTree<MyPoint> structure(points);
-    for(int i = 0; i < points.size(); i++){
-
-        // set evaluation point and scale at the ith coordinate
-        const VectorType& p = points.at(i).pos();
-	
-        // Here we now perform the fit
-        SphereFit _fit;
-        // Set a weighting function instance
-        _fit.setWeightFunc(WeightFunc(tmax));
-        // Set the evaluation position
-        _fit.init(p);
-
-        for( auto idx : structure.range_neighbors(p, tmax) ){
-            _fit.addNeighbor( points[idx] );
-        }
-        _fit.finalize();
-        
-        
-        if(_fit.isStable()){
-            curvature.push_back(_fit.kappa());
-        }
-    }
-    polyscope::getPointCloud("positions")->addScalarQuantity("curvature_RangeN", curvature);
 }
 
 
@@ -228,20 +138,95 @@ void myCallback() {
   ImGui::PushItemWidth(100); // Make ui elements 100 pixels wide,
                              // instead of full width. Must have 
                              // matching PopItemWidth() below.
+                            
+  
 
-  if (ImGui::Button("Compute Curvature")) {
-    // executes when button is pressed
-    ComputeCurvatureKnn();
-   // ComputeCurvatureRangeN();
+  KdTree<MyPoint> kdtree(points);
+
+  // KNN
+
+  if(ImGui::Button("Compute curvature with knn")) {
+
+    typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
+
+    std::vector< Scalar > curvature(points.size());  
+    
+    computeKnn<SphereFit>( kdtree, [&curvature]( int i, const SphereFit& _fit ) // c++lambda
+	{
+	   if( _fit.isStable() ){
+            curvature[i] = _fit.kappa();  
+
+        } 
+        else
+	     curvature[i] = 0;  
+	}
+    );
+    polyscope::getPointCloud("positions")->addScalarQuantity("curvature_knn", curvature);
   }
+
   ImGui::SameLine();
 
-  if (ImGui::Button("Compute Normals")) {
-    // executes when button is pressed
-    ComputeNormalsKnn();
-    //ComputeNormalsRangeN();
+  if (ImGui::Button("Compute Normals with knn")) {
+    typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
+
+    std::vector< std::array<double, 3> > normals(points.size());  
+    
+    computeKnn<PlaneFit>( kdtree, [&normals]( int i, const PlaneFit& _fit ) // c++lambda
+	{
+	   if( _fit.isStable() ){
+              VectorType no = _fit.primitiveGradient(points.at(i).pos());
+              normals[i] = {no[0],no[1], no[2]};
+           } else
+	      normals[i] = {0,0,0};
+	}
+    );
+    polyscope::getPointCloud("positions")->addVectorQuantity("normals_knn", normals);
   } 
 
+
+  // RN
+
+  if(ImGui::Button("Compute curvature with RN")) {
+
+    typedef Basket<MyPoint,WeightFunc,OrientedSphereFit,   GLSParam> SphereFit;
+
+    std::vector< Scalar > curvature(points.size());  
+    
+    computeRangeNeighbors<SphereFit>( kdtree, [&curvature]( int i, const SphereFit& _fit ) // c++lambda
+	{
+	   if( _fit.isStable() ){
+            curvature[i] = _fit.kappa();  
+
+        } 
+        else
+	     curvature[i] = 0;  
+	}
+    );
+    polyscope::getPointCloud("positions")->addScalarQuantity("curvature_RN", curvature);
+  }
+
+  ImGui::SameLine();
+
+  if (ImGui::Button("Compute Normals with RN")) {
+    typedef Basket<MyPoint,WeightFunc,CovariancePlaneFit> PlaneFit;
+
+    std::vector< std::array<double, 3> > normals(points.size());  
+    
+    computeRangeNeighbors<PlaneFit>( kdtree, [&normals]( int i, const PlaneFit& _fit ) // c++lambda
+	{
+	   if( _fit.isStable() ){
+              VectorType no = _fit.primitiveGradient(points.at(i).pos());
+              normals[i] = {no[0],no[1], no[2]};
+           } else
+	      normals[i] = {0,0,0};
+	}
+    );
+
+    polyscope::getPointCloud("positions")->addVectorQuantity("normals_RN", normals);
+  } 
+
+
+  
   ImGui::InputDouble("Scalar attribute", &tmax);  // set a double variable
   ImGui::InputInt("Variable K", &knei);  // set a float variable
 
